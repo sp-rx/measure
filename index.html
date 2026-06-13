@@ -1,138 +1,151 @@
+
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:var(--font-sans);background:transparent}
 #app{display:flex;flex-direction:column;gap:12px;padding:12px 0}
-#toolbar{display:flex;gap:8px;flex-wrap:wrap}
+#toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 button{padding:8px 14px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:var(--color-background-primary);color:var(--color-text-primary);font-size:14px;cursor:pointer}
 button:hover{background:var(--color-background-secondary)}
-button.active{background:var(--color-background-info);color:var(--color-text-info)}
-
-#zoom-row{display:flex;align-items:center;gap:10px}
-#zoom-row label{font-size:13px;color:var(--color-text-secondary)}
-#zoom-val{font-size:13px;font-weight:500;min-width:28px;text-align:right}
-
-#viewport{position:relative;width:100%;aspect-ratio:4/3;background:var(--color-background-secondary);
-border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);
-overflow:hidden;cursor:grab;user-select:none;touch-action:none}
-#viewport.grabbing{cursor:grabbing}
-
-#photo{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;
-transform-origin:center;pointer-events:none;display:none}
-
-#placeholder{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--color-text-tertiary)}
-
-.handle{position:absolute;width:22px;height:22px;background:#fff;border:2px solid #378ADD;border-radius:50%;
-transform:translate(-50%,-50%);cursor:crosshair;display:none;pointer-events:all}
-
-#ruler-line{
-  position:absolute;
-  top:50%;
-  left:0;
-  width:300px;              /* ✅ FIXED 300px */
-  height:0;
-  border-top:2px dashed #E24B4A;
-  transform:translateY(-50%);
-  display:none;
-}
-
-#stats{min-height:36px;padding:8px 12px;background:var(--color-background-secondary);
-border-radius:var(--border-radius-md);font-size:13px;color:var(--color-text-secondary)}
+button.active{background:var(--color-background-info);color:var(--color-text-info);border-color:var(--color-border-info)}
+#refLabel{font-size:13px;color:var(--color-text-secondary);display:flex;align-items:center;gap:6px}
+#refLabel input{width:64px;padding:5px 8px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:var(--color-background-primary);color:var(--color-text-primary);font-size:13px}
+#viewport{position:relative;width:100%;aspect-ratio:4/3;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;cursor:crosshair;user-select:none;touch-action:none}
+#photo{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;pointer-events:none;display:none}
+#placeholder{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--color-text-tertiary);pointer-events:none;font-size:13px}
+svg#sv{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.handle{position:absolute;width:24px;height:24px;background:var(--color-background-primary);border:2.5px solid #378ADD;border-radius:50%;transform:translate(-50%,-50%);cursor:grab;display:none;touch-action:none;pointer-events:all}
+.handle:active{background:#E6F1FB;cursor:grabbing}
+#stats{padding:9px 14px;background:var(--color-background-secondary);border-radius:var(--border-radius-md);font-size:13px;color:var(--color-text-secondary)}
+#stats b{color:var(--color-text-primary);font-weight:500}
 </style>
 
 <div id="app">
-
   <div id="toolbar">
-    <button id="rulerBtn">Ruler</button>
-    <button id="refBtn">300px Anchor</button>
-
-    <!-- ✅ NEW: calibration input -->
-    <label style="font-size:13px;display:flex;align-items:center;gap:6px;">
-      Ref (cm):
-      <input id="refCm" type="number" value="100" style="width:70px;">
-    </label>
+    <button id="rulerBtn">📏 Ruler</button>
+    <button id="refBtn">🔴 Anchor line</button>
+    <label id="refLabel">Ref cm: <input id="refCm" type="number" value="30" min="1"></label>
+    <button id="uploadBtn">⬆ Upload</button>
+    <input type="file" id="fileIn" accept="image/*" style="display:none">
   </div>
 
   <div id="viewport">
-    <img id="photo">
-    <div id="ruler-line"></div>
-
+    <div id="placeholder">⬆ Upload a photo to begin</div>
+    <img id="photo" alt="">
+    <svg id="sv">
+      <line id="mline" display="none" stroke="#378ADD" stroke-width="2" stroke-dasharray="6 3"/>
+      <line id="rline" display="none" stroke="#E24B4A" stroke-width="2" stroke-dasharray="8 4"/>
+    </svg>
     <div class="handle" id="h1"></div>
     <div class="handle" id="h2"></div>
   </div>
 
-  <div id="stats">Enable ruler</div>
+  <div id="stats">Enable ruler to measure</div>
 </div>
 
 <script>
 const vp=document.getElementById('viewport');
-const ruler=document.getElementById('ruler-line');
-const stats=document.getElementById('stats');
-const refCmInput=document.getElementById('refCm');
-
+const photo=document.getElementById('photo');
+const placeholder=document.getElementById('placeholder');
 const h1=document.getElementById('h1');
 const h2=document.getElementById('h2');
+const mline=document.getElementById('mline');
+const rline=document.getElementById('rline');
+const stats=document.getElementById('stats');
+const rulerBtn=document.getElementById('rulerBtn');
+const refBtn=document.getElementById('refBtn');
+const refCm=document.getElementById('refCm');
 
-let measureOn=false;
-let refOn=false;
+let measureOn=false, refOn=false;
+let p1={x:0,y:0}, p2={x:0,y:0}, inited=false;
+let dragging=null, activeId=null;
+let refPx=300;
 
-let p1={x:80,y:80}, p2={x:220,y:160};
+function getScale(){return parseFloat(refCm.value||30)/refPx;}
 
-/* ✅ SCALE: 300px = user-defined cm */
-function getScale(){
-  const cm = parseFloat(refCmInput.value || 100);
-  return cm / 300; // cm per pixel
+function initPoints(){
+  const w=vp.offsetWidth, h=vp.offsetHeight;
+  p1={x:Math.round(w*0.25),y:Math.round(h*0.5)};
+  p2={x:Math.round(w*0.75),y:Math.round(h*0.5)};
+  inited=true;
 }
 
-function updateHandles(){
-  const dx=p2.x-p1.x;
-  const dy=p2.y-p1.y;
-
-  const pxDist=Math.sqrt(dx*dx+dy*dy);
-  const cmDist=pxDist * getScale();
-
-  stats.innerHTML =
-    `Distance: <b>${pxDist.toFixed(1)} px</b> | <b>${cmDist.toFixed(2)} cm</b>`;
+function renderHandles(){
+  h1.style.left=p1.x+'px'; h1.style.top=p1.y+'px';
+  h2.style.left=p2.x+'px'; h2.style.top=p2.y+'px';
+  mline.setAttribute('x1',p1.x); mline.setAttribute('y1',p1.y);
+  mline.setAttribute('x2',p2.x); mline.setAttribute('y2',p2.y);
+  const dx=p2.x-p1.x, dy=p2.y-p1.y;
+  const px=Math.sqrt(dx*dx+dy*dy);
+  const cm=(px*getScale()).toFixed(2);
+  stats.innerHTML=`Δx <b>${Math.abs(dx).toFixed(1)}px</b> · Δy <b>${Math.abs(dy).toFixed(1)}px</b> · Distance <b>${px.toFixed(1)}px</b> = <b>${cm} cm</b>`;
 }
 
-/* toggle ruler */
-document.getElementById('rulerBtn').onclick=()=>{
+function renderRefLine(){
+  const w=vp.offsetWidth, h=vp.offsetHeight;
+  const cx=w/2, cy=h/2, half=refPx/2;
+  rline.setAttribute('x1',cx-half); rline.setAttribute('y1',cy);
+  rline.setAttribute('x2',cx+half); rline.setAttribute('y2',cy);
+}
+
+rulerBtn.onclick=()=>{
   measureOn=!measureOn;
-  h1.style.display=measureOn?'block':'none';
-  h2.style.display=measureOn?'block':'none';
-  updateHandles();
+  rulerBtn.classList.toggle('active',measureOn);
+  if(measureOn){
+    if(!inited)initPoints();
+    h1.style.display='block'; h2.style.display='block';
+    mline.setAttribute('display','');
+    renderHandles();
+  } else {
+    h1.style.display='none'; h2.style.display='none';
+    mline.setAttribute('display','none');
+    stats.textContent='Enable ruler to measure';
+  }
 };
 
-/* toggle anchor */
-document.getElementById('refBtn').onclick=()=>{
+refBtn.onclick=()=>{
   refOn=!refOn;
-  ruler.style.display=refOn?'block':'none';
+  refBtn.classList.toggle('active',refOn);
+  if(refOn){renderRefLine(); rline.setAttribute('display','');}
+  else rline.setAttribute('display','none');
 };
 
-/* simple drag */
-let dragging=null;
+refCm.oninput=()=>{if(measureOn)renderHandles();};
+
+document.getElementById('uploadBtn').onclick=()=>document.getElementById('fileIn').click();
+document.getElementById('fileIn').onchange=e=>{
+  const f=e.target.files[0]; if(!f)return;
+  const url=URL.createObjectURL(f);
+  photo.src=url;
+  photo.onload=()=>{URL.revokeObjectURL(url); photo.style.display='block'; placeholder.style.display='none'; inited=false; if(measureOn)initPoints(),renderHandles();};
+};
+
+function vpPos(e){
+  const r=vp.getBoundingClientRect();
+  const s=e.touches?e.touches[0]:e;
+  return{x:s.clientX-r.left, y:s.clientY-r.top};
+}
+
+function near(pos,p){return Math.hypot(pos.x-p.x,pos.y-p.y)<20;}
 
 vp.addEventListener('pointerdown',e=>{
-  const r=vp.getBoundingClientRect();
-  const x=e.clientX-r.left;
-  const y=e.clientY-r.top;
-
-  if(!measureOn) return;
-
-  dragging='h1';
-  p1={x,y};
-  updateHandles();
-});
+  if(!measureOn)return;
+  const pos=vpPos(e);
+  if(near(pos,p1)){dragging='h1'; vp.setPointerCapture(e.pointerId);}
+  else if(near(pos,p2)){dragging='h2'; vp.setPointerCapture(e.pointerId);}
+},{passive:true});
 
 vp.addEventListener('pointermove',e=>{
-  if(!dragging) return;
-
-  const r=vp.getBoundingClientRect();
-  const x=e.clientX-r.left;
-  const y=e.clientY-r.top;
-
-  p2={x,y};
-  updateHandles();
-});
+  if(!dragging)return;
+  const pos=vpPos(e);
+  if(dragging==='h1')p1=pos;
+  else p2=pos;
+  renderHandles();
+},{passive:true});
 
 vp.addEventListener('pointerup',()=>dragging=null);
+vp.addEventListener('pointercancel',()=>dragging=null);
+
+window.addEventListener('resize',()=>{
+  if(refOn)renderRefLine();
+});
 </script>
