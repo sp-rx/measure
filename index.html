@@ -1,272 +1,232 @@
-<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
 
 <style>
-body{
-  font-family:Arial;
-  margin:0;
-  padding:10px;
-}
-
-/* IMPORTANT: stops iPad pinch zoom interfering */
-#photoArea{
-  position:relative;
-  display:inline-block;
-  overflow:hidden;
-  border:1px solid #ccc;
-  touch-action:none;
-}
-
-button{
-  margin:5px;
-}
-
-#cameraModal{
-  display:none;
-  position:fixed;
-  inset:0;
-  background:black;
-  z-index:9999;
-}
-
-#video{
-  width:100%;
-  height:100%;
-  object-fit:cover;
-}
-
-#captureBtn{
-  position:absolute;
-  bottom:30px;
-  left:50%;
-  transform:translateX(-50%);
-  width:80px;
-  height:80px;
-  border-radius:50%;
-}
-
-#photo{
-  display:block;
-  transform-origin:center;
-  cursor:grab;
-}
-
-.line100{
-  position:absolute;
-  top:50%;
-  left:50%;
-  width:100px;
-  height:2px;
-  background:red;
-  transform:translate(-50%,-50%);
-  display:none;
-}
-
-.handle{
-  position:absolute;
-  width:12px;
-  height:12px;
-  background:blue;
-  border-radius:50%;
-  display:none;
-}
-
-#lengthText{
-  margin-top:5px;
-  font-weight:bold;
-}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);background:transparent}
+#app{display:flex;flex-direction:column;gap:12px;padding:12px 0}
+#toolbar{display:flex;gap:8px;flex-wrap:wrap}
+button{padding:8px 14px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:var(--color-background-primary);color:var(--color-text-primary);font-size:14px;cursor:pointer;transition:background .15s}
+button:hover{background:var(--color-background-secondary)}
+button.active{background:var(--color-background-info);color:var(--color-text-info);border-color:var(--color-border-info)}
+#zoom-row{display:flex;align-items:center;gap:10px}
+#zoom-row label{font-size:13px;color:var(--color-text-secondary);white-space:nowrap}
+#zoom-row input{flex:1}
+#zoom-val{font-size:13px;font-weight:500;min-width:28px;text-align:right}
+#viewport{position:relative;width:100%;aspect-ratio:4/3;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;cursor:grab;user-select:none;touch-action:none}
+#viewport.grabbing{cursor:grabbing}
+#photo{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;transform-origin:center;pointer-events:none;display:none}
+#placeholder{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--color-text-tertiary);pointer-events:none}
+#placeholder i{font-size:40px}
+#placeholder span{font-size:13px}
+#overlay{position:absolute;inset:0;pointer-events:none}
+svg#measureSvg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+.handle{position:absolute;width:22px;height:22px;background:var(--color-background-primary);border:2px solid #378ADD;border-radius:50%;transform:translate(-50%,-50%);cursor:crosshair;display:none;touch-action:none;pointer-events:all}
+.handle:active{background:#E6F1FB}
+#ruler-line{position:absolute;top:50%;left:0;width:100px;height:0;border-top:2px dashed #E24B4A;transform:translateY(-50%);transform-origin:left center;display:none;pointer-events:none}
+#stats{min-height:36px;padding:8px 12px;background:var(--color-background-secondary);border-radius:var(--border-radius-md);font-size:13px;color:var(--color-text-secondary);display:flex;gap:16px;align-items:center}
+#stats b{color:var(--color-text-primary);font-weight:500}
+#camWrap{position:relative;width:100%;aspect-ratio:4/3;background:#000;border-radius:var(--border-radius-lg);overflow:hidden;display:none}
+#video{width:100%;height:100%;object-fit:cover;display:block}
+#capBtn{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);width:64px;height:64px;border-radius:50%;border:3px solid #fff;background:rgba(255,255,255,.25);cursor:pointer;font-size:28px;display:flex;align-items:center;justify-content:center;backdrop-filter:none}
+#capBtn:hover{background:rgba(255,255,255,.45)}
+#stopBtn{position:absolute;top:12px;right:12px;background:rgba(0,0,0,.45);color:#fff;border:none;border-radius:var(--border-radius-md);padding:6px 12px;font-size:13px;cursor:pointer}
 </style>
-</head>
 
-<body>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
 
-<button onclick="openCamera()">Open Camera</button>
+<div id="app">
+  <h2 class="sr-only">Photo measurement tool</h2>
 
-<div>
-  <label>Zoom</label>
-  <input type="range" min="1" max="3" step="0.01" value="1" oninput="setZoom(this.value)">
-</div>
+  <div id="camWrap">
+    <video id="video" autoplay playsinline muted></video>
+    <button id="capBtn" aria-label="Capture photo"><i class="ti ti-camera" aria-hidden="true"></i></button>
+    <button id="stopBtn">✕ Cancel</button>
+  </div>
 
-<button onclick="toggle100()">Toggle 100px Line</button>
-<button onclick="toggleMeasure()">Toggle Measure Line</button>
+  <div id="viewport">
+    <div id="placeholder"><i class="ti ti-photo" aria-hidden="true"></i><span>Open camera or upload a photo</span></div>
+    <img id="photo" alt="Captured photo">
+    <svg id="measureSvg"><line id="mline" x1="0" y1="0" x2="0" y2="0" stroke="#378ADD" stroke-width="2" stroke-dasharray="6 3" display="none"/></svg>
+    <div class="handle" id="h1"></div>
+    <div class="handle" id="h2"></div>
+    <div id="ruler-line"></div>
+  </div>
 
-<div id="photoArea">
-  <img id="photo">
-  <div class="line100" id="line100"></div>
+  <div id="toolbar">
+    <button id="camBtn"><i class="ti ti-camera" aria-hidden="true" style="margin-right:5px"></i>Camera</button>
+    <label style="display:contents"><button as="label" onclick="document.getElementById('fileIn').click()"><i class="ti ti-upload" aria-hidden="true" style="margin-right:5px"></i>Upload</button></label>
+    <input type="file" id="fileIn" accept="image/*" style="display:none">
+    <button id="rulerBtn"><i class="ti ti-ruler" aria-hidden="true" style="margin-right:5px"></i>Ruler</button>
+    <button id="refBtn"><i class="ti ti-line" aria-hidden="true" style="margin-right:5px"></i>100 px ref</button>
+  </div>
 
-  <div class="handle" id="h1"></div>
-  <div class="handle" id="h2"></div>
-</div>
+  <div id="zoom-row">
+    <label>Zoom</label>
+    <input type="range" id="zoomSlider" min="1" max="4" step="0.05" value="1">
+    <span id="zoom-val">1.0×</span>
+  </div>
 
-<div id="lengthText"></div>
-
-<!-- CAMERA -->
-<div id="cameraModal">
-  <video id="video" autoplay playsinline></video>
-  <button id="captureBtn" onclick="capture()">📷</button>
+  <div id="stats"><span style="color:var(--color-text-tertiary);font-size:13px">Enable ruler to measure</span></div>
 </div>
 
 <script>
+const photo=document.getElementById('photo');
+const vp=document.getElementById('viewport');
+const h1=document.getElementById('h1');
+const h2=document.getElementById('h2');
+const mline=document.getElementById('mline');
+const rulerBtn=document.getElementById('rulerBtn');
+const refBtn=document.getElementById('refBtn');
+const camBtn=document.getElementById('camBtn');
+const camWrap=document.getElementById('camWrap');
+const video=document.getElementById('video');
+const stats=document.getElementById('stats');
+const ruler=document.getElementById('ruler-line');
+const placeholder=document.getElementById('placeholder');
+const zoomSlider=document.getElementById('zoomSlider');
 
-let stream;
-let zoom = 1;
-
-/* PAN STATE */
-let offsetX = 0;
-let offsetY = 0;
-let draggingPhoto = false;
-let startX, startY;
-
-/* MEASURE STATE */
-let dragging = null;
-let p1 = {x:50,y:50};
-let p2 = {x:200,y:200};
-
-const photo = document.getElementById("photo");
-const area = document.getElementById("photoArea");
-const h1 = document.getElementById("h1");
-const h2 = document.getElementById("h2");
-
-/* ================= CAMERA ================= */
-
-async function openCamera(){
-
-  document.getElementById("cameraModal").style.display="block";
-
-  stream = await navigator.mediaDevices.getUserMedia({
-    video:{ facingMode:{ideal:"environment"} }
-  });
-
-  document.getElementById("video").srcObject = stream;
-}
-
-function capture(){
-
-  const video = document.getElementById("video");
-  const canvas = document.createElement("canvas");
-
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-
-  canvas.getContext("2d").drawImage(video,0,0);
-
-  photo.src = canvas.toDataURL("image/jpeg");
-
-  document.getElementById("cameraModal").style.display="none";
-
-  stream.getTracks().forEach(t=>t.stop());
-
-  resetMeasure();
-  applyTransform();
-}
-
-/* ================= ZOOM ================= */
-
-function setZoom(v){
-  zoom = v;
-  applyTransform();
-}
-
-/* ================= PAN ================= */
+let zoom=1,panX=0,panY=0;
+let panning=false,panStart={x:0,y:0};
+let measureOn=false,refOn=false;
+let p1={x:80,y:80},p2={x:220,y:160};
+let dragging=null;
+let stream=null;
 
 function applyTransform(){
-  photo.style.transform =
-    `translate(${offsetX}px,${offsetY}px) scale(${zoom})`;
+  photo.style.transform=`translate(${panX}px,${panY}px) scale(${zoom})`;
 }
 
-/* pointer-based PAN (iPad FIX) */
-photo.addEventListener("pointerdown", e=>{
-  draggingPhoto = true;
-  startX = e.clientX - offsetX;
-  startY = e.clientY - offsetY;
-  photo.setPointerCapture(e.pointerId);
-});
+zoomSlider.oninput=e=>{
+  zoom=parseFloat(e.target.value);
+  document.getElementById('zoom-val').textContent=zoom.toFixed(2)+'×';
+  applyTransform();
+};
 
-document.addEventListener("pointermove", e=>{
+function showPhoto(){
+  photo.style.display='block';
+  placeholder.style.display='none';
+}
 
-  if(draggingPhoto){
-    offsetX = e.clientX - startX;
-    offsetY = e.clientY - startY;
-    applyTransform();
+document.getElementById('fileIn').onchange=e=>{
+  const f=e.target.files[0];if(!f)return;
+  const url=URL.createObjectURL(f);
+  photo.src=url;
+  photo.onload=()=>{URL.revokeObjectURL(url);showPhoto();resetPan();};
+};
+
+camBtn.onclick=async()=>{
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});
+    video.srcObject=stream;
+    camWrap.style.display='block';
+    vp.style.display='none';
+  }catch(err){
+    alert('Camera not available: '+err.message);
   }
+};
 
-  if(!dragging) return;
+document.getElementById('capBtn').onclick=()=>{
+  const canvas=document.createElement('canvas');
+  canvas.width=video.videoWidth||640;
+  canvas.height=video.videoHeight||480;
+  canvas.getContext('2d').drawImage(video,0,0);
+  photo.src=canvas.toDataURL('image/jpeg',0.95);
+  stopCamera();
+  showPhoto();
+  resetPan();
+};
 
-  const rect = area.getBoundingClientRect();
+document.getElementById('stopBtn').onclick=stopCamera;
 
-  let x = e.clientX - rect.left;
-  let y = e.clientY - rect.top;
-
-  if(dragging==="h1") p1 = {x,y};
-  if(dragging==="h2") p2 = {x,y};
-
-  updateHandles();
-});
-
-document.addEventListener("pointerup", ()=>{
-  draggingPhoto = false;
-  dragging = null;
-});
-
-/* ================= OVERLAY ================= */
-
-function toggle100(){
-  const el = document.getElementById("line100");
-  el.style.display = el.style.display==="block"?"none":"block";
+function stopCamera(){
+  if(stream)stream.getTracks().forEach(t=>t.stop());
+  stream=null;
+  camWrap.style.display='none';
+  vp.style.display='block';
 }
 
-function toggleMeasure(){
-  const show = h1.style.display !== "block";
+function resetPan(){panX=0;panY=0;zoom=1;zoomSlider.value=1;document.getElementById('zoom-val').textContent='1.00×';applyTransform();}
 
-  h1.style.display = show ? "block" : "none";
-  h2.style.display = show ? "block" : "none";
+rulerBtn.onclick=()=>{
+  measureOn=!measureOn;
+  rulerBtn.classList.toggle('active',measureOn);
+  h1.style.display=measureOn?'block':'none';
+  h2.style.display=measureOn?'block':'none';
+  mline.setAttribute('display',measureOn?'':'none');
+  if(measureOn)updateHandles();
+  else{stats.innerHTML='<span style="color:var(--color-text-tertiary);font-size:13px">Enable ruler to measure</span>';}
+};
 
-  if(show) updateHandles();
-  else document.getElementById("lengthText").innerText="";
-}
-
-/* ================= BLUE DOTS (iPad FIX) ================= */
-
-h1.addEventListener("pointerdown", e=>{
-  dragging="h1";
-  e.stopPropagation();
-  h1.setPointerCapture(e.pointerId);
-});
-
-h2.addEventListener("pointerdown", e=>{
-  dragging="h2";
-  e.stopPropagation();
-  h2.setPointerCapture(e.pointerId);
-});
-
-/* ================= MEASURE ================= */
+refBtn.onclick=()=>{
+  refOn=!refOn;
+  refBtn.classList.toggle('active',refOn);
+  ruler.style.display=refOn?'block':'none';
+};
 
 function updateHandles(){
-
-  h1.style.left = p1.x + "px";
-  h1.style.top  = p1.y + "px";
-
-  h2.style.left = p2.x + "px";
-  h2.style.top  = p2.y + "px";
-
-  const dx = p2.x - p1.x;
-  const dy = p2.y - p1.y;
-
-  document.getElementById("lengthText").innerText =
-    "X: " + Math.abs(dx).toFixed(1) +
-    " px | Y: " + Math.abs(dy).toFixed(1) + " px";
+  const w=vp.offsetWidth,h=vp.offsetHeight;
+  if(!p1.init){p1={x:Math.round(w*0.25),y:Math.round(h*0.5),init:true};}
+  if(!p2.init){p2={x:Math.round(w*0.75),y:Math.round(h*0.5),init:true};}
+  h1.style.left=p1.x+'px';h1.style.top=p1.y+'px';
+  h2.style.left=p2.x+'px';h2.style.top=p2.y+'px';
+  mline.setAttribute('x1',p1.x);mline.setAttribute('y1',p1.y);
+  mline.setAttribute('x2',p2.x);mline.setAttribute('y2',p2.y);
+  const dx=p2.x-p1.x,dy=p2.y-p1.y;
+  const dist=Math.sqrt(dx*dx+dy*dy);
+  stats.innerHTML=`<span>Δx <b>${Math.abs(dx).toFixed(1)} px</b></span><span>Δy <b>${Math.abs(dy).toFixed(1)} px</b></span><span>Distance <b>${dist.toFixed(1)} px</b></span>`;
 }
 
-/* ================= RESET ================= */
-
-function resetMeasure(){
-  p1={x:80,y:80};
-  p2={x:200,y:200};
+function getPointerVpPos(e){
+  const rect=vp.getBoundingClientRect();
+  const touch=e.touches?e.touches[0]:e;
+  return{x:touch.clientX-rect.left,y:touch.clientY-rect.top};
 }
 
+function isOnHandle(e,handle){
+  const pos=getPointerVpPos(e);
+  const hx=parseFloat(handle.style.left),hy=parseFloat(handle.style.top);
+  return Math.hypot(pos.x-hx,pos.y-hy)<20;
+}
+
+vp.addEventListener('pointerdown',e=>{
+  if(!measureOn){
+    panning=true;
+    panStart={x:e.clientX-panX,y:e.clientY-panY};
+    vp.classList.add('grabbing');
+    vp.setPointerCapture(e.pointerId);
+    return;
+  }
+  if(isOnHandle(e,h1)){dragging='h1';h1.setPointerCapture(e.pointerId);}
+  else if(isOnHandle(e,h2)){dragging='h2';h2.setPointerCapture(e.pointerId);}
+  else{
+    panning=true;
+    panStart={x:e.clientX-panX,y:e.clientY-panY};
+    vp.classList.add('grabbing');
+    vp.setPointerCapture(e.pointerId);
+  }
+},{passive:true});
+
+vp.addEventListener('pointermove',e=>{
+  if(panning){
+    panX=e.clientX-panStart.x;
+    panY=e.clientY-panStart.y;
+    applyTransform();
+    return;
+  }
+  if(!dragging)return;
+  const pos=getPointerVpPos(e);
+  if(dragging==='h1')p1={x:pos.x,y:pos.y,init:true};
+  if(dragging==='h2')p2={x:pos.x,y:pos.y,init:true};
+  updateHandles();
+},{passive:true});
+
+vp.addEventListener('pointerup',()=>{panning=false;dragging=null;vp.classList.remove('grabbing');});
+vp.addEventListener('pointercancel',()=>{panning=false;dragging=null;vp.classList.remove('grabbing');});
+
+vp.addEventListener('wheel',e=>{
+  e.preventDefault();
+  zoom=Math.max(1,Math.min(4,zoom-e.deltaY*0.001));
+  zoomSlider.value=zoom;
+  document.getElementById('zoom-val').textContent=zoom.toFixed(2)+'×';
+  applyTransform();
+},{passive:false});
 </script>
-
-</body>
-</html>
